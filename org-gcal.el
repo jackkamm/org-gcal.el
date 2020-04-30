@@ -180,13 +180,31 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
           (request-deferred
            (format org-gcal-events-url calendar-id)
            :type "GET"
-           :params `(("access_token" . ,a-token)
-                     ("key" . ,org-gcal-client-secret)
-                     ("singleEvents" . "True")
-                     ("orderBy" . "startTime")
-                     ("timeMin" . ,(org-gcal--subtract-time))
-                     ("timeMax" . ,(org-gcal--add-time))
-                     ("grant_type" . "authorization_code"))
+           :headers
+           `(("Accept" . "application/json")
+             ("Authorization" . ,(format "Bearer %s" a-token)))
+           :params
+           (append
+            `(("access_token" . ,a-token)
+              ("singleEvents" . "True"))
+            (seq-let [expires sync-token]
+                ;; Ensure ‘gethash’ return value is actually a list before
+                ;; passing to ‘seq-let’.
+                (when-let
+                    ((x (gethash calendar-id org-gcal--sync-tokens))
+                     ((listp x)))
+                  x)
+              (cond
+               ;; Don't use the sync token if it's expired.
+               ((and expires sync-token
+                     (time-less-p (current-time) expires))
+                `(("syncToken" . ,sync-token)))
+               (t
+                (remhash calendar-id org-gcal--sync-tokens)
+                `(("timeMin" . ,(org-gcal--format-time2iso up-time))
+                  ("timeMax" . ,(org-gcal--format-time2iso down-time))))))
+            (when-let ((pt (alist-get calendar-id page-token nil nil #'equal)))
+              `(("pageToken" . ,pt))))
            :parser 'org-gcal--json-read)
           (deferred:nextc it
             (lambda (response)
@@ -989,10 +1007,9 @@ object."
         (format org-gcal-events-url calendar-id)
         (concat "/" event-id))
        :type "GET"
-       :headers '(("Content-Type" . "application/json"))
-       :params `(("access_token" . ,a-token)
-                 ("key" . ,org-gcal-client-secret)
-                 ("grant_type" . "authorization_code"))
+       :headers
+       `(("Accept" . "application/json")
+         ("Authorization" . ,(format "Bearer %s" a-token)))
        :parser 'org-gcal--json-read)
       (deferred:nextc it
         (lambda (response)
@@ -1052,10 +1069,16 @@ Returns a ‘deferred’ object that can be used to wait for completion."
           (when (and event-id etag)
             (concat "/" event-id)))
          :type (if event-id "PATCH" "POST")
-         :headers (append
-                   '(("Content-Type" . "application/json"))
-                   (if (null etag) nil
-                     `(("If-Match" . ,etag))))
+         :headers (append)
+         `(("Content-Type" . "application/json")
+                     ("Accept" . "application/json")
+                     ("Authorization" . ,(format "Bearer %s" a-token)))
+                   (cond
+                    ((null etag) nil)
+                    ((null event-id)
+                     (error "Event cannot have ETag set when event ID absent"))
+                    (t
+                     `(("If-Match" . ,etag)))))
          :data (encode-coding-string
                 (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
                                ("end" (,etime . ,(if (equal "date" etime)
@@ -1065,10 +1088,6 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                                ("location" . ,loc)
                                ("description" . ,desc)))
                 'utf-8)
-         :params `(("access_token" . ,a-token)
-                   ("key" . ,org-gcal-client-secret)
-                   ("grant_type" . "authorization_code"))
-
          :parser 'org-gcal--json-read)
         (deferred:nextc it
           (lambda (response)
@@ -1158,14 +1177,16 @@ Returns a ‘deferred’ object that can be used to wait for completion."
           (format org-gcal-events-url calendar-id)
           (concat "/" event-id))
          :type "DELETE"
-         :headers (append
-                   '(("Content-Type" . "application/json"))
-                   (if (null etag) nil
-                     `(("If-Match" . ,etag))))
-         :params `(("access_token" . ,a-token)
-                   ("key" . ,org-gcal-client-secret)
-                   ("grant_type" . "authorization_code"))
-
+         :headers (append)
+         `(("Content-Type" . "application/json")
+                     ("Accept" . "application/json")
+                     ("Authorization" . ,(format "Bearer %s" a-token)))
+                   (cond
+                    ((null etag) nil)
+                    ((null event-id)
+                     (error "Event cannot have ETag set when event ID absent"))
+                    (t
+                     `(("If-Match" . ,etag)))))
          :parser 'org-gcal--json-read)
         (deferred:nextc it
           (lambda (response)
