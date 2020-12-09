@@ -310,7 +310,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
               (unless silent
                 (org-gcal--notify "Completed event fetching ."
                                   (concat "Events fetched into\n" calendar-file)))
-              (deferred:succeed nil))))))))
+              (deferred:succeed nil)))))
 
 ;;;###autoload
 (defun org-gcal-fetch ()
@@ -1156,7 +1156,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                 (deferred:succeed nil)))))))
       :finally
       (lambda (_)
-        (set-marker marker nil)))))
+        (set-marker marker nil))))
 
 
 (defun org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
@@ -1244,7 +1244,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                 (deferred:succeed nil)))))))
       :finally
       (lambda (_)
-        (set-marker marker nil)))))
+        (set-marker marker nil))))
 
 (defun org-gcal--capture-post ()
   (dolist (i org-gcal-fetch-file-alist)
